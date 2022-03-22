@@ -12,12 +12,12 @@
 #define SENSOR_PIN_6 33
 
 // OSC-Stuff ----------------------------------------------------------
-IPAddress outIp = {192, 168, 236, 41};  //
+IPAddress outIp = {192, 168, 1, 105};  // IP Adress of Receiver PC
 WiFiUDP Udp;
-const unsigned int localPort = 9000;
-const unsigned int destPort = 6448; // Wekinator Port
-const char *ssid = "xxxxxxxx";
-const char *password = "xxxxxxxx";  // min. 8 characters
+const unsigned int localPort = 9000; // not needed
+const unsigned int destPort = 6448; // Wekinator Port: 6448
+const char *ssid = "xxxxxx";
+const char *password = "xxxxxx";  // min. 8 characters
 
 unsigned long millisCurrent, millisOld;
 
@@ -27,9 +27,9 @@ float s1Old, s2Old, s3Old, s4Old, s5Old, s6Old;
 
 void setup() {
   Serial.begin(115200);
-  analogReadResolution(10);
+  //analogReadResolution(10);
 
-  WiFi.setHostname("Spaghettimonster");
+  WiFi.setHostname("Spaghettimonster7");
   //WiFi.config(staticIP, subnet, gateway, dns);
   WiFi.mode(WIFI_STA); //WiFi mode station (connect to wifi router only)
   WiFi.begin(ssid, password);
@@ -55,19 +55,21 @@ void setup() {
 
 void loop() {
   millisCurrent = millis();
-  s1 = map(f1.filter(analogRead(SENSOR_PIN_1)), 0, 1023, 0, 126);
-  s2 = map(f2.filter(analogRead(SENSOR_PIN_2)), 0, 1023, 0, 126);
-  s3 = map(f3.filter(analogRead(SENSOR_PIN_3)), 0, 1023, 0, 126);
-  s4 = map(f4.filter(analogRead(SENSOR_PIN_4)), 0, 1023, 0, 126);
-  s5 = map(f5.filter(analogRead(SENSOR_PIN_5)), 0, 1023, 0, 126);
-  s6 = map(f6.filter(analogRead(SENSOR_PIN_6)), 0, 1023, 0, 126);
+
+  s1 = f1.filter(analogRead(SENSOR_PIN_1)) / 4095.0;
+  s2 = f2.filter(analogRead(SENSOR_PIN_2)) / 4095.0;
+  s3 = f3.filter(analogRead(SENSOR_PIN_3)) / 4095.0;
+  s4 = f4.filter(analogRead(SENSOR_PIN_4)) / 4095.0;
+  s5 = f5.filter(analogRead(SENSOR_PIN_5)) / 4095.0;
+  s6 = f6.filter(analogRead(SENSOR_PIN_6)) / 4095.0;
 
   if (millisCurrent >= millisOld + 40) {
     Serial.printf("%f,%f,%f,%f,%f,%f\n", s1, s2, s3, s4, s5, s6); // open Serial Plotter to see a sensor-graph
 
     if (WiFi.status() == WL_CONNECTED)
     {
-      OSCMessage msg("/wek/inputs");
+      //OSCMessage msg("/wek/inputs");
+      OSCMessage msg("/spaghetti/7");
       msg.add(s1);
       msg.add(s2);
       msg.add(s3);
