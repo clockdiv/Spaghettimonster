@@ -35,9 +35,11 @@ void setup() {
   WiFi.begin(ssid, password);
 
   // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
+  uint16_t timeOut = 0;
+  while ((WiFi.status() != WL_CONNECTED) && (timeOut < 10)) {
     delay(500);
-    Serial.print(".");
+    timeOut++;
+    Serial.println(timeOut);
   }
   Serial.print("local IP address: ");
   Serial.println(WiFi.localIP());
@@ -65,7 +67,15 @@ void loop() {
 
   if (millisCurrent >= millisOld + 40) {
     Serial.printf("%f,%f,%f,%f,%f,%f\n", s1, s2, s3, s4, s5, s6); // open Serial Plotter to see a sensor-graph
-
+    /*
+    Serial.write(uint8_t(s1*255.0));
+    Serial.write(uint8_t(s2*255.0));
+    Serial.write(uint8_t(s3*255.0));
+    Serial.write(uint8_t(s4*255.0));
+    Serial.write(uint8_t(s5*255.0));
+    Serial.write(uint8_t(s6*255.0));
+    Serial.println();
+    */
     if (WiFi.status() == WL_CONNECTED)
     {
       //OSCMessage msg("/wek/inputs");
@@ -102,11 +112,12 @@ void loop() {
       msg.empty();
 
     }
+/*
     else {
       Serial.print("WiFi.status != WL_CONNECTED - ");
       Serial.println(WiFi.status());
     }
-
+*/
     millisOld = millisCurrent;
   }
 }
