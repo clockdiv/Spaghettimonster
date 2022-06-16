@@ -12,6 +12,8 @@ Here you find **two versions** for the Spaghetti Monster:
 ### OSC
 * sends all Inputs via OSC. Train it with [Wekinator](http://www.wekinator.org) to have even more fun!
 * (all values are send with 25fps)
+* so you could also control DMX stage lights like in this example: https://github.com/clockdiv/VLDMX
 
 ![](img/Spaghettimonster02.jpg)
 ![](img/Spaghettimonster01.gif)
+![](img/Bandsalat.jpg)
