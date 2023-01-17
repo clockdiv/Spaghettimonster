@@ -29,13 +29,13 @@ void setup() {
   Serial.begin(115200);
   //analogReadResolution(10);
 
-  WiFi.setHostname("Spaghettimonster7");
+  WiFi.setHostname("Spaghettimonster1");
   //WiFi.config(staticIP, subnet, gateway, dns);
   WiFi.mode(WIFI_STA); //WiFi mode station (connect to wifi router only)
   WiFi.begin(ssid, password);
 
   // Wait for connection
-  uint16_t timeOut = 0;
+  int timeOut = 0;
   while ((WiFi.status() != WL_CONNECTED) && (timeOut < 10)) {
     delay(500);
     timeOut++;
@@ -79,7 +79,7 @@ void loop() {
     if (WiFi.status() == WL_CONNECTED)
     {
       //OSCMessage msg("/wek/inputs");
-      OSCMessage msg("/spaghetti/7");
+      OSCMessage msg("/spaghetti/1");
       msg.add(s1);
       msg.add(s2);
       msg.add(s3);
