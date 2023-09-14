@@ -23,10 +23,11 @@ typedef struct sensor_data {
   float s5;
   float s6;
 } sensor_data;
-sensor_data spaghettimonsterData;
+sensor_data spaghettimonsterData_01, spaghettimonsterData_02, spaghettimonsterData_03;
 
 esp_now_peer_info_t slave;
 int channel = 1;
+unsigned long millisCurrent, millisOld;
 
 void printMAC(const uint8_t *mac_addr) {
   char macStr[18];
@@ -52,8 +53,17 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
   uint8_t type = incomingData[0];  // first message byte is the type of message
   switch (type) {
     case DATA:  // the message is data type
-      memcpy(&spaghettimonsterData, incomingData, sizeof(sensor_data));
-      Serial.printf("%d,%f,%f,%f,%f,%f,%f\n", spaghettimonsterData.id, spaghettimonsterData.s1, spaghettimonsterData.s2, spaghettimonsterData.s3, spaghettimonsterData.s4, spaghettimonsterData.s5, spaghettimonsterData.s6);
+      sensor_data tmp_data;
+      memcpy(&tmp_data, incomingData, sizeof(sensor_data));
+      if (tmp_data.id == 1) {
+        memcpy(&spaghettimonsterData_01, incomingData, sizeof(sensor_data));
+      } else if (tmp_data.id == 2) {
+        memcpy(&spaghettimonsterData_02, incomingData, sizeof(sensor_data));
+      } else if (tmp_data.id == 3) {
+        memcpy(&spaghettimonsterData_03, incomingData, sizeof(sensor_data));
+      }
+      // memcpy(&spaghettimonsterData_01, incomingData, sizeof(sensor_data));
+      // Serial.printf("%d,%f,%f,%f,%f,%f,%f\n", spaghettimonsterData_01.id, spaghettimonsterData_01.s1, spaghettimonsterData_01.s2, spaghettimonsterData_01.s3, spaghettimonsterData_01.s4, spaghettimonsterData_01.s5, spaghettimonsterData_01.s6);
       break;
 
     case PAIRING:  // the message is a pairing request
@@ -104,7 +114,7 @@ bool addPeer(const uint8_t *peer_addr) {  // add pairing
 
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(500000);
 
   WiFi.mode(WIFI_MODE_STA);
   Serial.print("Receiver ESP Board MAC Address:  ");
@@ -125,4 +135,61 @@ void setup() {
   esp_now_register_recv_cb(OnDataRecv);
 }
 
-void loop() {}
+void loop() {
+  unsigned long millisCurrent = millis();
+  if (millisCurrent - millisOld >= 40) {
+    // Serial.printf("%d,%f,%f,%f,%f,%f,%f,",
+    //               spaghettimonsterData_01.id,
+    //               spaghettimonsterData_01.s1,
+    //               spaghettimonsterData_01.s2,
+    //               spaghettimonsterData_01.s3,
+    //               spaghettimonsterData_01.s4,
+    //               spaghettimonsterData_01.s5,
+    //               spaghettimonsterData_01.s6);
+
+    // Serial.printf("%d,%f,%f,%f,%f,%f,%f,",
+    //               spaghettimonsterData_02.id,
+    //               spaghettimonsterData_02.s1,
+    //               spaghettimonsterData_02.s2,
+    //               spaghettimonsterData_02.s3,
+    //               spaghettimonsterData_02.s4,
+    //               spaghettimonsterData_02.s5,
+    //               spaghettimonsterData_02.s6);
+
+    // Serial.printf("%d,%f,%f,%f,%f,%f,%f",
+    //               spaghettimonsterData_03.id,
+    //               spaghettimonsterData_03.s1,
+    //               spaghettimonsterData_03.s2,
+    //               spaghettimonsterData_03.s3,
+    //               spaghettimonsterData_03.s4,
+    //               spaghettimonsterData_03.s5,
+    //               spaghettimonsterData_03.s6);
+    Serial.printf("%f,%f,%f,%f,%f,%f,",
+                  spaghettimonsterData_01.s1,
+                  spaghettimonsterData_01.s2,
+                  spaghettimonsterData_01.s3,
+                  spaghettimonsterData_01.s4,
+                  spaghettimonsterData_01.s5,
+                  spaghettimonsterData_01.s6);
+
+    Serial.printf("%f,%f,%f,%f,%f,%f,",
+                  spaghettimonsterData_02.s1,
+                  spaghettimonsterData_02.s2,
+                  spaghettimonsterData_02.s3,
+                  spaghettimonsterData_02.s4,
+                  spaghettimonsterData_02.s5,
+                  spaghettimonsterData_02.s6);
+
+    Serial.printf("%f,%f,%f,%f,%f,%f",
+                  spaghettimonsterData_03.s1,
+                  spaghettimonsterData_03.s2,
+                  spaghettimonsterData_03.s3,
+                  spaghettimonsterData_03.s4,
+                  spaghettimonsterData_03.s5,
+                  spaghettimonsterData_03.s6);
+
+    Serial.printf("\n");
+    
+    millisOld = millisCurrent;
+  }
+}

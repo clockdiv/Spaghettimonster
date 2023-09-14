@@ -46,6 +46,12 @@ typedef struct sensor_data {
 } sensor_data;
 sensor_data spaghettimonsterData;
 
+typedef struct value_range {
+  float max = 0;
+  float min = 4095;
+} value_range;
+value_range r1, r2, r3, r4, r5, r6;
+
 uint8_t serverAddress[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 #ifdef SAVE_CHANNEL
 int lastChannel;
@@ -54,6 +60,10 @@ int channel = 1;
 
 averageFilter f1, f2, f3, f4, f5, f6;
 unsigned long millisCurrent, millisOld;
+
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max) {
+  return (float)(x - in_min) * (out_max - out_min) / (float)(in_max - in_min) + out_min;
+}
 
 void printMAC(const uint8_t *mac_addr) {
   char macStr[18];
@@ -86,7 +96,7 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
       Serial.print("Pairing done for ");
       printMAC(mac_addr);
       Serial.print(" on channel ");
-      Serial.print(pairingData.channel);  // channel used by the server
+      Serial.print(pairingData.channel);       // channel used by the server
       addPeer(mac_addr, pairingData.channel);  // add the server  to the peer list
 #ifdef SAVE_CHANNEL
       lastChannel = pairingData.channel;
@@ -162,6 +172,23 @@ PairingStatus autoPairing() {
   return pairingStatus;
 }
 
+float multisample(uint8_t analogPin, const uint8_t sampleCount = 32) {
+  float sum = 0;
+  float highest = 0;
+  float lowest = 4095;
+  for (int i = 0; i < sampleCount; i++) {
+    float sample = analogRead(analogPin);
+    sum += sample;
+    if (sample > highest) highest = sample;
+    if (sample < lowest) lowest = sample;
+  }
+  sum -= highest;
+  sum -= lowest;
+  sum /= (sampleCount - 2);
+  sum /= 4095.0;
+  return sum;
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(BUILTIN_LED, OUTPUT);
@@ -188,6 +215,11 @@ void setup() {
   millisOld = millis();
 }
 
+void set_min_max(float sample, value_range &vr) {
+  if (sample > vr.max) vr.max = sample;
+  if (sample < vr.min) vr.min = sample;
+}
+
 void loop() {
   if (autoPairing() == PAIR_PAIRED) {
     unsigned long millisCurrent = millis();
@@ -195,12 +227,36 @@ void loop() {
       millisOld = millisCurrent;
       spaghettimonsterData.msgType = DATA;
       spaghettimonsterData.id = BOARD_ID;
-      spaghettimonsterData.s1 = f1.filter(analogRead(SENSOR_PIN_1)) / 4095.0;
-      spaghettimonsterData.s2 = f2.filter(analogRead(SENSOR_PIN_2)) / 4095.0;
-      spaghettimonsterData.s3 = f3.filter(analogRead(SENSOR_PIN_3)) / 4095.0;
-      spaghettimonsterData.s4 = f4.filter(analogRead(SENSOR_PIN_4)) / 4095.0;
-      spaghettimonsterData.s5 = f5.filter(analogRead(SENSOR_PIN_5)) / 4095.0;
-      spaghettimonsterData.s6 = f6.filter(analogRead(SENSOR_PIN_6)) / 4095.0;
+      // spaghettimonsterData.s1 = f1.filter(analogRead(SENSOR_PIN_1)) / 4095.0;
+      // spaghettimonsterData.s2 = f2.filter(analogRead(SENSOR_PIN_2)) / 4095.0;
+      // spaghettimonsterData.s3 = f3.filter(analogRead(SENSOR_PIN_3)) / 4095.0;
+      // spaghettimonsterData.s4 = f4.filter(analogRead(SENSOR_PIN_4)) / 4095.0;
+      // spaghettimonsterData.s5 = f5.filter(analogRead(SENSOR_PIN_5)) / 4095.0;
+      // spaghettimonsterData.s6 = f6.filter(analogRead(SENSOR_PIN_6)) / 4095.0;
+
+      float sample = multisample(SENSOR_PIN_1);
+      set_min_max(sample, r1);
+      spaghettimonsterData.s1 = constrain(mapfloat(sample, r1.min + 0.01, r1.max - 0.01, 0, 1), 0, 1);
+
+      sample = multisample(SENSOR_PIN_2);
+      set_min_max(sample, r2);
+      spaghettimonsterData.s2 = constrain(mapfloat(sample, r2.min + 0.01, r2.max - 0.01, 0, 1), 0, 1);
+
+      sample = multisample(SENSOR_PIN_3);
+      set_min_max(sample, r3);
+      spaghettimonsterData.s3 = constrain(mapfloat(sample, r3.min + 0.01, r3.max - 0.01, 0, 1), 0, 1);
+
+      sample = multisample(SENSOR_PIN_4);
+      set_min_max(sample, r4);
+      spaghettimonsterData.s4 = constrain(mapfloat(sample, r4.min + 0.01, r4.max - 0.01, 0, 1), 0, 1);
+
+      sample = multisample(SENSOR_PIN_5);
+      set_min_max(sample, r5);
+      spaghettimonsterData.s5 = constrain(mapfloat(sample, r5.min + 0.01, r5.max - 0.01, 0, 1), 0, 1);
+
+      sample = multisample(SENSOR_PIN_6);
+      set_min_max(sample, r6);
+      spaghettimonsterData.s6 = constrain(mapfloat(sample, r6.min + 0.01, r6.max - 0.01, 0, 1), 0, 1);
 
       esp_err_t result = esp_now_send(serverAddress, (uint8_t *)&spaghettimonsterData, sizeof(sensor_data));
       if (result != ESP_OK) {
