@@ -1,6 +1,9 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <WiFi.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
 #include "averageFilter.h"
 
 #define SENSOR_PIN_1 36
@@ -44,7 +47,7 @@ typedef struct sensor_data {
   float s5;
   float s6;
 } sensor_data;
-sensor_data spaghettimonsterData;
+sensor_data spaghettimonsterData, spaghettimonsterDataRounded, spaghettimonsterDataRoundedOld;
 
 typedef struct value_range {
   float max = 0;
@@ -60,6 +63,8 @@ int channel = 1;
 
 averageFilter f1, f2, f3, f4, f5, f6;
 unsigned long millisCurrent, millisOld;
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 float mapfloat(float x, float in_min, float in_max, float out_min, float out_max) {
   return (float)(x - in_min) * (out_max - out_min) / (float)(in_max - in_min) + out_min;
@@ -98,12 +103,21 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
       Serial.print(" on channel ");
       Serial.print(pairingData.channel);       // channel used by the server
       addPeer(mac_addr, pairingData.channel);  // add the server  to the peer list
+      lcd.setCursor(0, 1);
+      lcd.cursor_off();
+      lcd.blink_off();
+      lcd.print(("connected!      "));
+
 #ifdef SAVE_CHANNEL
       lastChannel = pairingData.channel;
       EEPROM.write(0, pairingData.channel);
       EEPROM.commit();
 #endif
       pairingStatus = PAIR_PAIRED;  // set the pairing status
+      delay(1000);
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print(spaghettimonsterData.id);
     }
   }
 }
@@ -193,6 +207,16 @@ void setup() {
   Serial.begin(115200);
   pinMode(BUILTIN_LED, OUTPUT);
 
+  lcd.begin();
+  lcd.clear();
+  lcd.backlight();
+  lcd.print("Spaghettimonster");
+  lcd.setCursor(0, 1);
+  lcd.print("connecting...");
+  lcd.cursor_on();
+  lcd.blink_on();
+
+
   Serial.println();
   Serial.print("Client Board MAC Address:  ");
   Serial.println(WiFi.macAddress());
@@ -237,30 +261,72 @@ void loop() {
       float sample = multisample(SENSOR_PIN_1);
       set_min_max(sample, r1);
       spaghettimonsterData.s1 = constrain(mapfloat(sample, r1.min + 0.01, r1.max - 0.01, 0, 1), 0, 1);
+      spaghettimonsterDataRounded.s1 = ((int)(spaghettimonsterData.s1 * 100.0f)) / 100.0f;
 
       sample = multisample(SENSOR_PIN_2);
       set_min_max(sample, r2);
       spaghettimonsterData.s2 = constrain(mapfloat(sample, r2.min + 0.01, r2.max - 0.01, 0, 1), 0, 1);
+      spaghettimonsterDataRounded.s2 = ((int)(spaghettimonsterData.s2 * 100.0f)) / 100.0f;
+
 
       sample = multisample(SENSOR_PIN_3);
       set_min_max(sample, r3);
       spaghettimonsterData.s3 = constrain(mapfloat(sample, r3.min + 0.01, r3.max - 0.01, 0, 1), 0, 1);
+      spaghettimonsterDataRounded.s3 = ((int)(spaghettimonsterData.s3 * 100.0f)) / 100.0f;
+
 
       sample = multisample(SENSOR_PIN_4);
       set_min_max(sample, r4);
       spaghettimonsterData.s4 = constrain(mapfloat(sample, r4.min + 0.01, r4.max - 0.01, 0, 1), 0, 1);
+      spaghettimonsterDataRounded.s4 = ((int)(spaghettimonsterData.s4 * 100.0f)) / 100.0f;
+
 
       sample = multisample(SENSOR_PIN_5);
       set_min_max(sample, r5);
       spaghettimonsterData.s5 = constrain(mapfloat(sample, r5.min + 0.01, r5.max - 0.01, 0, 1), 0, 1);
+      spaghettimonsterDataRounded.s5 = ((int)(spaghettimonsterData.s5 * 100.0f)) / 100.0f;
+
 
       sample = multisample(SENSOR_PIN_6);
       set_min_max(sample, r6);
       spaghettimonsterData.s6 = constrain(mapfloat(sample, r6.min + 0.01, r6.max - 0.01, 0, 1), 0, 1);
+      spaghettimonsterDataRounded.s6 = ((int)(spaghettimonsterData.s6 * 100.0f)) / 100.0f;
+
 
       esp_err_t result = esp_now_send(serverAddress, (uint8_t *)&spaghettimonsterData, sizeof(sensor_data));
       if (result != ESP_OK) {
         Serial.println("Error sending the data");
+      } else {
+        if (spaghettimonsterDataRounded.s1 != spaghettimonsterDataRoundedOld.s1) {
+          lcd.setCursor(4, 0);
+          lcd.printf("%0.2f", spaghettimonsterDataRounded.s1);
+          spaghettimonsterDataRoundedOld.s1 = spaghettimonsterDataRounded.s1;
+        }
+        if (spaghettimonsterDataRounded.s2 != spaghettimonsterDataRoundedOld.s2) {
+          lcd.setCursor(8, 0);
+          lcd.printf("%.2f", spaghettimonsterDataRounded.s2);
+          spaghettimonsterDataRoundedOld.s2 = spaghettimonsterDataRounded.s2;
+        }
+        if (spaghettimonsterDataRounded.s3 != spaghettimonsterDataRoundedOld.s3) {
+          lcd.setCursor(12, 0);
+          lcd.printf("%.2f", spaghettimonsterDataRounded.s3);
+          spaghettimonsterDataRoundedOld.s3 = spaghettimonsterDataRounded.s3;
+        }
+        if (spaghettimonsterDataRounded.s4 != spaghettimonsterDataRoundedOld.s4) {
+          lcd.setCursor(4, 1);
+          lcd.printf("%.2f", spaghettimonsterDataRounded.s4);
+          spaghettimonsterDataRoundedOld.s4 = spaghettimonsterDataRounded.s4;
+        }
+        if (spaghettimonsterDataRounded.s5 != spaghettimonsterDataRoundedOld.s5) {
+          lcd.setCursor(8, 1);
+          lcd.printf("%.2f", spaghettimonsterDataRounded.s5);
+          spaghettimonsterDataRoundedOld.s5 = spaghettimonsterDataRounded.s5;
+        }
+        if (spaghettimonsterDataRounded.s6 != spaghettimonsterDataRoundedOld.s6) {
+          lcd.setCursor(12, 1);
+          lcd.printf("%.2f", spaghettimonsterDataRounded.s6);
+          spaghettimonsterDataRoundedOld.s6 = spaghettimonsterDataRounded.s6;
+        }
       }
     }
   }
