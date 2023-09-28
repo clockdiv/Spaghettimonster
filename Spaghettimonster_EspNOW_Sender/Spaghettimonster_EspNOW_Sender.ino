@@ -2,7 +2,7 @@
 #include <esp_wifi.h>
 #include <WiFi.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <Adafruit_SSD1306.h>
 
 #include "averageFilter.h"
 
@@ -15,7 +15,7 @@
 #define BUILTIN_LED 13
 
 // Set your Board and Server ID
-#define BOARD_ID 1
+#define BOARD_ID 2
 #define MAX_CHANNEL 13  // for North America // 13 in Europe
 
 enum PairingStatus { NOT_PAIRED,
@@ -47,7 +47,8 @@ typedef struct sensor_data {
   float s5;
   float s6;
 } sensor_data;
-sensor_data spaghettimonsterData, spaghettimonsterDataRounded, spaghettimonsterDataRoundedOld;
+// sensor_data spaghettimonsterData, spaghettimonsterDataRounded, spaghettimonsterDataRoundedOld;
+sensor_data spaghettimonsterData;
 
 typedef struct value_range {
   float max = 0;
@@ -64,7 +65,8 @@ int channel = 1;
 averageFilter f1, f2, f3, f4, f5, f6;
 unsigned long millisCurrent, millisOld;
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+Adafruit_SSD1306 display(128, 64, &Wire, -1);
+
 
 float mapfloat(float x, float in_min, float in_max, float out_min, float out_max) {
   return (float)(x - in_min) * (out_max - out_min) / (float)(in_max - in_min) + out_min;
@@ -103,10 +105,8 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
       Serial.print(" on channel ");
       Serial.print(pairingData.channel);       // channel used by the server
       addPeer(mac_addr, pairingData.channel);  // add the server  to the peer list
-      lcd.setCursor(0, 1);
-      lcd.cursor_off();
-      lcd.blink_off();
-      lcd.print(("connected!      "));
+      display.setCursor(0, 1);
+      display.print(("connected!      "));
 
 #ifdef SAVE_CHANNEL
       lastChannel = pairingData.channel;
@@ -115,9 +115,9 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
 #endif
       pairingStatus = PAIR_PAIRED;  // set the pairing status
       delay(1000);
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print(spaghettimonsterData.id);
+      display.clearDisplay();
+      display.setCursor(0, 0);
+      display.print(spaghettimonsterData.id);
     }
   }
 }
@@ -203,19 +203,109 @@ float multisample(uint8_t analogPin, const uint8_t sampleCount = 32) {
   return sum;
 }
 
+void set_min_max(float sample, value_range &vr) {
+  if (sample > vr.max) vr.max = sample;
+  if (sample < vr.min) vr.min = sample;
+}
+
+void printID() {
+  display.setTextSize(1);
+  if (BOARD_ID < 10) {
+    display.setCursor(128 - 12 - 14, 7);
+    display.print("ID");
+
+    display.setTextSize(2);
+    display.setCursor(128 - 12, 0);
+    display.print(BOARD_ID);
+    display.setTextSize(1);
+  } else {
+    display.setCursor(128 - 24 - 14, 7);
+    display.print("ID");
+
+    display.setTextSize(2);
+    display.setCursor(128 - 24, 0);
+    display.print(BOARD_ID);
+    display.setTextSize(1);
+  }
+}
+
+// char *sensorToString(float value) {
+//   // formats the value to a string with 3 digits, without leading zero
+//   // e.g. '.00', '.05', '.67', '1.0'
+//   char* buffer = (char*)malloc(5);
+//   char* dest_buffer = (char*)malloc(4);
+//   if (value < 1) {
+//     snprintf(buffer, 5, "%.2f", value);
+//     for (int i = 0; i < 3; i++) {
+//       dest_buffer[i] = buffer[i + 1];
+//     }
+//   } else {
+//     char onedotzero[] = { '1', '.', '0' };
+//     memcpy(dest_buffer, onedotzero, sizeof(onedotzero));
+//   }
+//   dest_buffer[3] = '\0';
+//   return dest_buffer;
+// }
+
+String sensorToString(float value) {
+  // formats the value to a string with 3 digits, without leading zero
+  // e.g. '.00', '.05', '.67', '1.0'
+  char buffer[5];
+  char dest_buffer[4];
+  if (value < 1) {
+    snprintf(buffer, 5, "%.2f", value);
+    for (int i = 0; i < 3; i++) {
+      dest_buffer[i] = buffer[i + 1];
+    }
+  } else {
+    char onedotzero[] = { '1', '.', '0' };
+    memcpy(dest_buffer, onedotzero, sizeof(onedotzero));
+  }
+
+  dest_buffer[3] = '\0';
+  return dest_buffer;
+}
+
+void printSensorValue(float value, uint8_t index) {
+  const int width = 21;
+  const int height = 30;
+  const int padding = 6;
+  const int x = 0;
+  const int y = 56;
+  display.setCursor(x + index * width, y);
+  // char *d = sensorToString(spaghettimonsterData.s1);
+  // display.print(d);
+  // free(d);
+
+  display.setTextSize(1);
+  display.print(sensorToString(value));
+  display.drawRect(x + index * width + padding - 2, y - 1 * height - 4, width - padding * 2, 1 * height, SSD1306_WHITE);
+  display.fillRect(x + index * width + padding - 2, y - value * height - 4, width - padding * 2, value * height, SSD1306_WHITE);
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(BUILTIN_LED, OUTPUT);
 
-  lcd.begin();
-  lcd.clear();
-  lcd.backlight();
-  lcd.print("Spaghettimonster");
-  lcd.setCursor(0, 1);
-  lcd.print("connecting...");
-  lcd.cursor_on();
-  lcd.blink_on();
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;)
+      ;  // Don't proceed, loop forever
+  }
 
+  display.setTextWrap(false);
+  display.clearDisplay();
+  display.setTextSize(1);  // Draw 2X-scale text
+  display.setTextColor(SSD1306_WHITE);
+
+  display.setCursor(0, 0);
+  display.print("Spaghettimonster");
+
+  printID();
+
+  display.setCursor(0, 64 - 12);
+  display.print("connecting...");
+  display.display();
 
   Serial.println();
   Serial.print("Client Board MAC Address:  ");
@@ -239,11 +329,6 @@ void setup() {
   millisOld = millis();
 }
 
-void set_min_max(float sample, value_range &vr) {
-  if (sample > vr.max) vr.max = sample;
-  if (sample < vr.min) vr.min = sample;
-}
-
 void loop() {
   if (autoPairing() == PAIR_PAIRED) {
     unsigned long millisCurrent = millis();
@@ -261,72 +346,51 @@ void loop() {
       float sample = multisample(SENSOR_PIN_1);
       set_min_max(sample, r1);
       spaghettimonsterData.s1 = constrain(mapfloat(sample, r1.min + 0.01, r1.max - 0.01, 0, 1), 0, 1);
-      spaghettimonsterDataRounded.s1 = ((int)(spaghettimonsterData.s1 * 100.0f)) / 100.0f;
+      // spaghettimonsterDataRounded.s1 = ((int)(spaghettimonsterData.s1 * 100.0f)) / 100.0f;
 
       sample = multisample(SENSOR_PIN_2);
       set_min_max(sample, r2);
       spaghettimonsterData.s2 = constrain(mapfloat(sample, r2.min + 0.01, r2.max - 0.01, 0, 1), 0, 1);
-      spaghettimonsterDataRounded.s2 = ((int)(spaghettimonsterData.s2 * 100.0f)) / 100.0f;
+      // spaghettimonsterDataRounded.s2 = ((int)(spaghettimonsterData.s2 * 100.0f)) / 100.0f;
 
 
       sample = multisample(SENSOR_PIN_3);
       set_min_max(sample, r3);
       spaghettimonsterData.s3 = constrain(mapfloat(sample, r3.min + 0.01, r3.max - 0.01, 0, 1), 0, 1);
-      spaghettimonsterDataRounded.s3 = ((int)(spaghettimonsterData.s3 * 100.0f)) / 100.0f;
+      // spaghettimonsterDataRounded.s3 = ((int)(spaghettimonsterData.s3 * 100.0f)) / 100.0f;
 
 
       sample = multisample(SENSOR_PIN_4);
       set_min_max(sample, r4);
       spaghettimonsterData.s4 = constrain(mapfloat(sample, r4.min + 0.01, r4.max - 0.01, 0, 1), 0, 1);
-      spaghettimonsterDataRounded.s4 = ((int)(spaghettimonsterData.s4 * 100.0f)) / 100.0f;
+      // spaghettimonsterDataRounded.s4 = ((int)(spaghettimonsterData.s4 * 100.0f)) / 100.0f;
 
 
       sample = multisample(SENSOR_PIN_5);
       set_min_max(sample, r5);
       spaghettimonsterData.s5 = constrain(mapfloat(sample, r5.min + 0.01, r5.max - 0.01, 0, 1), 0, 1);
-      spaghettimonsterDataRounded.s5 = ((int)(spaghettimonsterData.s5 * 100.0f)) / 100.0f;
+      // spaghettimonsterDataRounded.s5 = ((int)(spaghettimonsterData.s5 * 100.0f)) / 100.0f;
 
 
       sample = multisample(SENSOR_PIN_6);
       set_min_max(sample, r6);
       spaghettimonsterData.s6 = constrain(mapfloat(sample, r6.min + 0.01, r6.max - 0.01, 0, 1), 0, 1);
-      spaghettimonsterDataRounded.s6 = ((int)(spaghettimonsterData.s6 * 100.0f)) / 100.0f;
+      // spaghettimonsterDataRounded.s6 = ((int)(spaghettimonsterData.s6 * 100.0f)) / 100.0f;
 
 
       esp_err_t result = esp_now_send(serverAddress, (uint8_t *)&spaghettimonsterData, sizeof(sensor_data));
       if (result != ESP_OK) {
         Serial.println("Error sending the data");
       } else {
-        if (spaghettimonsterDataRounded.s1 != spaghettimonsterDataRoundedOld.s1) {
-          lcd.setCursor(4, 0);
-          lcd.printf("%0.2f", spaghettimonsterDataRounded.s1);
-          spaghettimonsterDataRoundedOld.s1 = spaghettimonsterDataRounded.s1;
-        }
-        if (spaghettimonsterDataRounded.s2 != spaghettimonsterDataRoundedOld.s2) {
-          lcd.setCursor(8, 0);
-          lcd.printf("%.2f", spaghettimonsterDataRounded.s2);
-          spaghettimonsterDataRoundedOld.s2 = spaghettimonsterDataRounded.s2;
-        }
-        if (spaghettimonsterDataRounded.s3 != spaghettimonsterDataRoundedOld.s3) {
-          lcd.setCursor(12, 0);
-          lcd.printf("%.2f", spaghettimonsterDataRounded.s3);
-          spaghettimonsterDataRoundedOld.s3 = spaghettimonsterDataRounded.s3;
-        }
-        if (spaghettimonsterDataRounded.s4 != spaghettimonsterDataRoundedOld.s4) {
-          lcd.setCursor(4, 1);
-          lcd.printf("%.2f", spaghettimonsterDataRounded.s4);
-          spaghettimonsterDataRoundedOld.s4 = spaghettimonsterDataRounded.s4;
-        }
-        if (spaghettimonsterDataRounded.s5 != spaghettimonsterDataRoundedOld.s5) {
-          lcd.setCursor(8, 1);
-          lcd.printf("%.2f", spaghettimonsterDataRounded.s5);
-          spaghettimonsterDataRoundedOld.s5 = spaghettimonsterDataRounded.s5;
-        }
-        if (spaghettimonsterDataRounded.s6 != spaghettimonsterDataRoundedOld.s6) {
-          lcd.setCursor(12, 1);
-          lcd.printf("%.2f", spaghettimonsterDataRounded.s6);
-          spaghettimonsterDataRoundedOld.s6 = spaghettimonsterDataRounded.s6;
-        }
+        display.clearDisplay();
+        printID();
+        printSensorValue(spaghettimonsterData.s1, 0);
+        printSensorValue(spaghettimonsterData.s2, 1);
+        printSensorValue(spaghettimonsterData.s3, 2);
+        printSensorValue(spaghettimonsterData.s4, 3);
+        printSensorValue(spaghettimonsterData.s5, 4);
+        printSensorValue(spaghettimonsterData.s6, 5);
+        display.display();
       }
     }
   }

@@ -1,6 +1,11 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
+#include <Wire.h>
+#include <Adafruit_SSD1306.h>
+
+const uint8_t SPAGHETTIMONSTER_COUNT = 6;
+
 enum MessageType { PAIRING,
                    DATA,
 };
@@ -23,11 +28,14 @@ typedef struct sensor_data {
   float s5;
   float s6;
 } sensor_data;
-sensor_data spaghettimonsterData_01, spaghettimonsterData_02, spaghettimonsterData_03;
+// sensor_data spaghettimonsterData_01, spaghettimonsterData_02, spaghettimonsterData_03;
+sensor_data spaghettimonsterData[SPAGHETTIMONSTER_COUNT];
 
 esp_now_peer_info_t slave;
 int channel = 1;
 unsigned long millisCurrent, millisOld;
+
+Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
 void printMAC(const uint8_t *mac_addr) {
   char macStr[18];
@@ -54,14 +62,22 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
   switch (type) {
     case DATA:  // the message is data type
       sensor_data tmp_data;
+
       memcpy(&tmp_data, incomingData, sizeof(sensor_data));
-      if (tmp_data.id == 1) {
-        memcpy(&spaghettimonsterData_01, incomingData, sizeof(sensor_data));
-      } else if (tmp_data.id == 2) {
-        memcpy(&spaghettimonsterData_02, incomingData, sizeof(sensor_data));
-      } else if (tmp_data.id == 3) {
-        memcpy(&spaghettimonsterData_03, incomingData, sizeof(sensor_data));
+
+      if (tmp_data.id > 0) {
+        memcpy(&spaghettimonsterData[tmp_data.id - 1], incomingData, sizeof(sensor_data));
       }
+
+      // if (tmp_data.id == 1) {
+      //   memcpy(&spaghettimonsterData[0], incomingData, sizeof(sensor_data));
+      // } else if (tmp_data.id == 2) {
+      //   memcpy(&spaghettimonsterData[1], incomingData, sizeof(sensor_data));
+      // } else if (tmp_data.id == 3) {
+      //   memcpy(&spaghettimonsterData[2], incomingData, sizeof(sensor_data));
+      // }
+
+
       // memcpy(&spaghettimonsterData_01, incomingData, sizeof(sensor_data));
       // Serial.printf("%d,%f,%f,%f,%f,%f,%f\n", spaghettimonsterData_01.id, spaghettimonsterData_01.s1, spaghettimonsterData_01.s2, spaghettimonsterData_01.s3, spaghettimonsterData_01.s4, spaghettimonsterData_01.s5, spaghettimonsterData_01.s6);
       break;
@@ -112,9 +128,22 @@ bool addPeer(const uint8_t *peer_addr) {  // add pairing
   }
 }
 
-
 void setup() {
   Serial.begin(500000);
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;)
+      ;  // Don't proceed, loop forever
+  }
+
+  display.setTextWrap(false);
+  display.clearDisplay();
+  display.setTextSize(1);  // Draw 2X-scale text
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("Spaghettimonster RX");
+  display.display();
 
   WiFi.mode(WIFI_MODE_STA);
   Serial.print("Receiver ESP Board MAC Address:  ");
@@ -133,63 +162,63 @@ void setup() {
 
   esp_now_register_send_cb(OnDataSent);
   esp_now_register_recv_cb(OnDataRecv);
+
+  for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
+    spaghettimonsterData[i].id = 255;
+  }
+}
+
+void displayData(uint8_t index) {
+  const int width = 21;
+  const int height = 30;
+  const int padding = 6;
+  const int x = 0;
+  const int y = 52;
+  display.setCursor(x + index * width + 4, y + 4);
+  display.setTextSize(1);
+
+  if (spaghettimonsterData[index].id < 255) {
+    display.print(spaghettimonsterData[index].id);
+
+    display.fillRect(x + index * width + 0 * 2, y - spaghettimonsterData[index].s1 * height, 1, spaghettimonsterData[index].s1 * height, SSD1306_WHITE);
+    display.fillRect(x + index * width + 1 * 2, y - spaghettimonsterData[index].s2 * height, 1, spaghettimonsterData[index].s2 * height, SSD1306_WHITE);
+    display.fillRect(x + index * width + 2 * 2, y - spaghettimonsterData[index].s3 * height, 1, spaghettimonsterData[index].s3 * height, SSD1306_WHITE);
+    display.fillRect(x + index * width + 3 * 2, y - spaghettimonsterData[index].s4 * height, 1, spaghettimonsterData[index].s4 * height, SSD1306_WHITE);
+    display.fillRect(x + index * width + 4 * 2, y - spaghettimonsterData[index].s5 * height, 1, spaghettimonsterData[index].s5 * height, SSD1306_WHITE);
+    display.fillRect(x + index * width + 5 * 2, y - spaghettimonsterData[index].s6 * height, 1, spaghettimonsterData[index].s6 * height, SSD1306_WHITE);
+
+  } else {
+    display.print('-');
+  }
 }
 
 void loop() {
   unsigned long millisCurrent = millis();
   if (millisCurrent - millisOld >= 40) {
-    // Serial.printf("%d,%f,%f,%f,%f,%f,%f,",
-    //               spaghettimonsterData_01.id,
-    //               spaghettimonsterData_01.s1,
-    //               spaghettimonsterData_01.s2,
-    //               spaghettimonsterData_01.s3,
-    //               spaghettimonsterData_01.s4,
-    //               spaghettimonsterData_01.s5,
-    //               spaghettimonsterData_01.s6);
+    display.clearDisplay();
 
-    // Serial.printf("%d,%f,%f,%f,%f,%f,%f,",
-    //               spaghettimonsterData_02.id,
-    //               spaghettimonsterData_02.s1,
-    //               spaghettimonsterData_02.s2,
-    //               spaghettimonsterData_02.s3,
-    //               spaghettimonsterData_02.s4,
-    //               spaghettimonsterData_02.s5,
-    //               spaghettimonsterData_02.s6);
-
-    // Serial.printf("%d,%f,%f,%f,%f,%f,%f",
-    //               spaghettimonsterData_03.id,
-    //               spaghettimonsterData_03.s1,
-    //               spaghettimonsterData_03.s2,
-    //               spaghettimonsterData_03.s3,
-    //               spaghettimonsterData_03.s4,
-    //               spaghettimonsterData_03.s5,
-    //               spaghettimonsterData_03.s6);
-    Serial.printf("%f,%f,%f,%f,%f,%f,",
-                  spaghettimonsterData_01.s1,
-                  spaghettimonsterData_01.s2,
-                  spaghettimonsterData_01.s3,
-                  spaghettimonsterData_01.s4,
-                  spaghettimonsterData_01.s5,
-                  spaghettimonsterData_01.s6);
-
-    Serial.printf("%f,%f,%f,%f,%f,%f,",
-                  spaghettimonsterData_02.s1,
-                  spaghettimonsterData_02.s2,
-                  spaghettimonsterData_02.s3,
-                  spaghettimonsterData_02.s4,
-                  spaghettimonsterData_02.s5,
-                  spaghettimonsterData_02.s6);
-
-    Serial.printf("%f,%f,%f,%f,%f,%f",
-                  spaghettimonsterData_03.s1,
-                  spaghettimonsterData_03.s2,
-                  spaghettimonsterData_03.s3,
-                  spaghettimonsterData_03.s4,
-                  spaghettimonsterData_03.s5,
-                  spaghettimonsterData_03.s6);
-
+    for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
+      if (spaghettimonsterData[i].id < 255) {
+        Serial.printf("%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,",
+                      spaghettimonsterData[i].id,
+                      spaghettimonsterData[i].s1,
+                      spaghettimonsterData[i].s2,
+                      spaghettimonsterData[i].s3,
+                      spaghettimonsterData[i].s4,
+                      spaghettimonsterData[i].s5,
+                      spaghettimonsterData[i].s6);
+      }
+      displayData(i);
+    }
     Serial.printf("\n");
-    
+
+    display.setCursor(0, 0);
+    display.print("Spaghettimonster RX");
+    display.display();
+
+    // for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
+    //   spaghettimonsterData[i].id = 255;
+    // }
     millisOld = millisCurrent;
   }
 }
