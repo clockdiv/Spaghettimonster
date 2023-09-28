@@ -192,33 +192,75 @@ void displayData(uint8_t index) {
   }
 }
 
+
+
+void print_data_as_csv() {
+  for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
+    if (spaghettimonsterData[i].id < 255) {
+      Serial.printf("%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,",
+                    spaghettimonsterData[i].id,
+                    spaghettimonsterData[i].s1,
+                    spaghettimonsterData[i].s2,
+                    spaghettimonsterData[i].s3,
+                    spaghettimonsterData[i].s4,
+                    spaghettimonsterData[i].s5,
+                    spaghettimonsterData[i].s6);
+    }
+  }
+  Serial.printf("\n");
+}
+
+void print_data_as_json() {
+  Serial.printf("{");
+  for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
+    if (spaghettimonsterData[i].id < 255) {
+      Serial.printf("\"%d\":\"(%.6f,%.6f,%.6f,%.6f,%.6f,%.6f)\"",
+                    spaghettimonsterData[i].id,
+                    spaghettimonsterData[i].s1,
+                    spaghettimonsterData[i].s2,
+                    spaghettimonsterData[i].s3,
+                    spaghettimonsterData[i].s4,
+                    spaghettimonsterData[i].s5,
+                    spaghettimonsterData[i].s6);
+    }
+
+    if (i < SPAGHETTIMONSTER_COUNT - 1) {
+      if (spaghettimonsterData[i + 1].id < 255) {
+        Serial.printf(",");
+      }
+    }
+  }
+  Serial.printf("}\n");
+}
+
+void print_debug_data() {
+  // Serial.printf("{ '1' : '(1.000000,0.329251,0.000000,0.303578,0.134032,0.462309)', '2' : '(0.513508,0.508389,0.500000,0.530522,0.511721,0.794337)', '3' : '(1.000000,0.472681,0.474965,0.337906,0.550442,0.000000)'}");
+  Serial.printf("{\"1\":\"(0.503225,0.521750,0.214153,0.522978,0.133823,0.000000)\",\"2\":\"(0.535541,0.536594,0.500000,0.538680,0.543106,0.748236)\",\"3\":\"(0.533928,0.523421,0.524241,0.496456,0.532858,0.000000)\"}");
+
+  Serial.printf("\n");
+}
+
+void print_data_to_display() {
+  display.clearDisplay();
+
+  for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
+    displayData(i);
+  }
+  display.setCursor(0, 0);
+  display.print("Spaghettimonster RX");
+  display.display();
+}
+
 void loop() {
   unsigned long millisCurrent = millis();
   if (millisCurrent - millisOld >= 40) {
-    display.clearDisplay();
 
-    for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
-      if (spaghettimonsterData[i].id < 255) {
-        Serial.printf("%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,",
-                      spaghettimonsterData[i].id,
-                      spaghettimonsterData[i].s1,
-                      spaghettimonsterData[i].s2,
-                      spaghettimonsterData[i].s3,
-                      spaghettimonsterData[i].s4,
-                      spaghettimonsterData[i].s5,
-                      spaghettimonsterData[i].s6);
-      }
-      displayData(i);
-    }
-    Serial.printf("\n");
+    // print_data_as_csv();
+    // print_data_as_json();
+    print_debug_data();
 
-    display.setCursor(0, 0);
-    display.print("Spaghettimonster RX");
-    display.display();
 
-    // for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
-    //   spaghettimonsterData[i].id = 255;
-    // }
+    print_data_to_display();
     millisOld = millisCurrent;
   }
 }
