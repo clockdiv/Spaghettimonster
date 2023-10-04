@@ -15,8 +15,9 @@
 #define BUILTIN_LED 13
 
 // Set your Board and Server ID
-#define BOARD_ID 2
+#define BOARD_ID 3
 #define MAX_CHANNEL 13  // for North America // 13 in Europe
+const unsigned long send_interval = 1000.0 / 60.0;
 
 enum PairingStatus { NOT_PAIRED,
                      PAIR_REQUEST,
@@ -332,7 +333,7 @@ void setup() {
 void loop() {
   if (autoPairing() == PAIR_PAIRED) {
     unsigned long millisCurrent = millis();
-    if (millisCurrent - millisOld >= 40) {
+    if (millisCurrent - millisOld >= send_interval) {
       millisOld = millisCurrent;
       spaghettimonsterData.msgType = DATA;
       spaghettimonsterData.id = BOARD_ID;

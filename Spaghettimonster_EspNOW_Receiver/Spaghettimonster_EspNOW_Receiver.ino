@@ -5,6 +5,7 @@
 #include <Adafruit_SSD1306.h>
 
 const uint8_t SPAGHETTIMONSTER_COUNT = 6;
+const unsigned long send_interval = 1000.0 / 60.0;
 
 enum MessageType { PAIRING,
                    DATA,
@@ -214,7 +215,7 @@ void print_data_as_json() {
   Serial.printf("{");
   for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
     if (spaghettimonsterData[i].id < 255) {
-      Serial.printf("\"%d\":\"(%.6f,%.6f,%.6f,%.6f,%.6f,%.6f)\"",
+      Serial.printf("\"%d\":[%.6f,%.6f,%.6f,%.6f,%.6f,%.6f]",
                     spaghettimonsterData[i].id,
                     spaghettimonsterData[i].s1,
                     spaghettimonsterData[i].s2,
@@ -286,12 +287,12 @@ void print_data_to_display() {
 
 void loop() {
   unsigned long millisCurrent = millis();
-  if (millisCurrent - millisOld >= 40) {
+  if (millisCurrent - millisOld >= send_interval) {
 
     // print_data_as_csv();
-    // print_data_as_json();
+    print_data_as_json();
     // print_debug_data();
-    print_debug_sine_data();
+    // print_debug_sine_data();
 
 
     print_data_to_display();
