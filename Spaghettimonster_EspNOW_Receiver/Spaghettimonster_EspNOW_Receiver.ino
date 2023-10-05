@@ -5,7 +5,7 @@
 #include <Adafruit_SSD1306.h>
 
 const uint8_t SPAGHETTIMONSTER_COUNT = 6;
-const unsigned long send_interval = 1000.0 / 60.0;
+const unsigned long send_interval = 50;
 
 enum MessageType { PAIRING,
                    DATA,
@@ -31,10 +31,13 @@ typedef struct sensor_data {
 } sensor_data;
 // sensor_data spaghettimonsterData_01, spaghettimonsterData_02, spaghettimonsterData_03;
 sensor_data spaghettimonsterData[SPAGHETTIMONSTER_COUNT];
+sensor_data tmp_data;
 
 esp_now_peer_info_t slave;
 int channel = 1;
 unsigned long millisCurrent, millisOld;
+
+unsigned long stopwatch = 0, stopwatchOld = 0;
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
@@ -55,6 +58,10 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 }
 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
+  // stopwatch = millis();
+  // Serial.println(stopwatch);
+  // stopwatchOld = stopwatch;
+
   // Serial.print(len);
   // Serial.print(" bytes of data received from : ");
   // printMAC(mac_addr);
@@ -62,13 +69,19 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
   uint8_t type = incomingData[0];  // first message byte is the type of message
   switch (type) {
     case DATA:  // the message is data type
-      sensor_data tmp_data;
+
+
 
       memcpy(&tmp_data, incomingData, sizeof(sensor_data));
 
       if (tmp_data.id > 0) {
         memcpy(&spaghettimonsterData[tmp_data.id - 1], incomingData, sizeof(sensor_data));
       }
+
+
+
+
+
 
       // if (tmp_data.id == 1) {
       //   memcpy(&spaghettimonsterData[0], incomingData, sizeof(sensor_data));
@@ -237,14 +250,29 @@ void print_data_as_json() {
 void print_debug_data() {
   // Serial.printf("{ '1' : '(1.000000,0.329251,0.000000,0.303578,0.134032,0.462309)', '2' : '(0.513508,0.508389,0.500000,0.530522,0.511721,0.794337)', '3' : '(1.000000,0.472681,0.474965,0.337906,0.550442,0.000000)'}");
   // Serial.printf("{\"1\":\"(0.503225,0.521750,0.214153,0.522978,0.133823,0.000000)\",\"2\":\"(0.535541,0.536594,0.500000,0.538680,0.543106,0.748236)\",\"3\":\"(0.533928,0.523421,0.524241,0.496456,0.532858,0.000000)\"}");
-  Serial.printf("{\"1\":[0.503225,0.521750,0.214153,0.522978,0.133823,0.000000],\"2\":[0.535541,0.536594,0.500000,0.538680,0.543106,0.748236],\"3\":[0.533928,0.523421,0.524241,0.496456,0.532858,0.000000]}");
+  // Serial.printf("{\"1\":[0.503225,0.521750,0.214153,0.522978,0.133823,0.000000],\"2\":[0.535541,0.536594,0.500000,0.538680,0.543106,0.748236],\"3\":[0.533928,0.523421,0.524241,0.496456,0.532858,0.000000]}");
+  // Serial.printf("%.6f,%.6f\n", spaghettimonsterData[1].s4, (sin(millis()/100.0)+1.0)/2.0);
+
+  // Serial.printf("%.6f\n", spaghettimonsterData[1].s4);
+
+  uint8_t i = 1;
+
+  Serial.printf("%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f",
+                spaghettimonsterData[i].id,
+                spaghettimonsterData[i].s1,
+                spaghettimonsterData[i].s2,
+                spaghettimonsterData[i].s3,
+                spaghettimonsterData[i].s4,
+                spaghettimonsterData[i].s5,
+                spaghettimonsterData[i].s6);
+
   Serial.printf("\n");
 }
 
 void print_debug_sine_data() {
   // Serial.printf("{ '1' : '(1.000000,0.329251,0.000000,0.303578,0.134032,0.462309)', '2' : '(0.513508,0.508389,0.500000,0.530522,0.511721,0.794337)', '3' : '(1.000000,0.472681,0.474965,0.337906,0.550442,0.000000)'}");
   // Serial.printf("{\"1\":\"(0.503225,0.521750,0.214153,0.522978,0.133823,0.000000)\",\"2\":\"(0.535541,0.536594,0.500000,0.538680,0.543106,0.748236)\",\"3\":\"(0.533928,0.523421,0.524241,0.496456,0.532858,0.000000)\"}");
-  float offset = sin(millis()/100.0);
+  float offset = sin(millis() / 100.0);
   // Serial.printf("{\"1\":[0.503225,0.521750,0.214153,0.522978,0.133823,0.000000],\"2\":[0.535541,0.536594,0.500000,0.538680,0.543106,0.748236],\"3\":[0.533928,0.523421,0.524241,0.496456,0.532858,0.000000]}");
   Serial.printf("{\"%d\":[%.6f, %.6f, %.6f, %.6f, %.6f, %.6f],\"%d\":[%.6f, %.6f, %.6f, %.6f, %.6f, %.6f],\"%d\":[%.6f, %.6f, %.6f, %.6f, %.6f, %.6f]}",
                 0,
@@ -267,8 +295,7 @@ void print_debug_sine_data() {
                 offset + 14.0,
                 offset + 15.0,
                 offset + 16.0,
-                offset + 17.0
-                );
+                offset + 17.0);
 
 
   Serial.printf("\n");
@@ -286,13 +313,13 @@ void print_data_to_display() {
 }
 
 void loop() {
-  unsigned long millisCurrent = millis();
+  millisCurrent = millis();
   if (millisCurrent - millisOld >= send_interval) {
 
     // print_data_as_csv();
-    print_data_as_json();
     // print_debug_data();
     // print_debug_sine_data();
+    print_data_as_json();
 
 
     print_data_to_display();

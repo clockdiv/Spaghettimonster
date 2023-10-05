@@ -17,7 +17,7 @@
 // Set your Board and Server ID
 #define BOARD_ID 3
 #define MAX_CHANNEL 13  // for North America // 13 in Europe
-const unsigned long send_interval = 1000.0 / 60.0;
+const unsigned long send_interval = 50;
 
 enum PairingStatus { NOT_PAIRED,
                      PAIR_REQUEST,
@@ -285,7 +285,7 @@ void printSensorValue(float value, uint8_t index) {
 }
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(500000);
   pinMode(BUILTIN_LED, OUTPUT);
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
@@ -332,7 +332,7 @@ void setup() {
 
 void loop() {
   if (autoPairing() == PAIR_PAIRED) {
-    unsigned long millisCurrent = millis();
+    millisCurrent = millis();
     if (millisCurrent - millisOld >= send_interval) {
       millisOld = millisCurrent;
       spaghettimonsterData.msgType = DATA;
@@ -383,6 +383,8 @@ void loop() {
       if (result != ESP_OK) {
         Serial.println("Error sending the data");
       } else {
+        // Serial.printf("%.6f\n", spaghettimonsterData.s4);
+
         display.clearDisplay();
         printID();
         printSensorValue(spaghettimonsterData.s1, 0);
