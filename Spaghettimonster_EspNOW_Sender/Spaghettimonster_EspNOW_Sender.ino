@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <Wire.h>
 #include <Adafruit_SSD1306.h>
+#include <Bounce2.h>
 
 #include "averageFilter.h"
 
@@ -12,12 +13,13 @@
 #define SENSOR_PIN_4 35
 #define SENSOR_PIN_5 32
 #define SENSOR_PIN_6 33
+#define BTN_PIN 19
 #define BUILTIN_LED 13
 
 // Set your Board and Server ID
-#define BOARD_ID 3
+#define BOARD_ID 2
 #define MAX_CHANNEL 13  // for North America // 13 in Europe
-const unsigned long send_interval = 50;
+const unsigned long send_interval = 1000 / 120;
 
 enum PairingStatus { NOT_PAIRED,
                      PAIR_REQUEST,
@@ -49,7 +51,7 @@ typedef struct sensor_data {
   float s6;
 } sensor_data;
 // sensor_data spaghettimonsterData, spaghettimonsterDataRounded, spaghettimonsterDataRoundedOld;
-sensor_data spaghettimonsterData;
+sensor_data spaghettimonsterData, dataToSend;
 
 typedef struct value_range {
   float max = 0;
@@ -67,6 +69,8 @@ averageFilter f1, f2, f3, f4, f5, f6;
 unsigned long millisCurrent, millisOld;
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
+
+Bounce2::Button btn = Bounce2::Button();
 
 
 float mapfloat(float x, float in_min, float in_max, float out_min, float out_max) {
@@ -187,22 +191,6 @@ PairingStatus autoPairing() {
   return pairingStatus;
 }
 
-float multisample(uint8_t analogPin, const uint8_t sampleCount = 32) {
-  float sum = 0;
-  float highest = 0;
-  float lowest = 4095;
-  for (int i = 0; i < sampleCount; i++) {
-    float sample = analogRead(analogPin);
-    sum += sample;
-    if (sample > highest) highest = sample;
-    if (sample < lowest) lowest = sample;
-  }
-  sum -= highest;
-  sum -= lowest;
-  sum /= (sampleCount - 2);
-  sum /= 4095.0;
-  return sum;
-}
 
 void set_min_max(float sample, value_range &vr) {
   if (sample > vr.max) vr.max = sample;
@@ -315,6 +303,10 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
+  btn.attach(BTN_PIN, INPUT_PULLUP);
+  btn.interval(25);
+  btn.setPressedState(LOW);
+
 #ifdef SAVE_CHANNEL
   EEPROM.begin(10);
   lastChannel = EEPROM.read(0);
@@ -331,69 +323,61 @@ void setup() {
 }
 
 void loop() {
+  btn.update();
+
+  spaghettimonsterData.s1 = f1.filter(analogRead(SENSOR_PIN_1)) / 4095.0;
+  spaghettimonsterData.s2 = f2.filter(analogRead(SENSOR_PIN_2)) / 4095.0;
+  spaghettimonsterData.s3 = f3.filter(analogRead(SENSOR_PIN_3)) / 4095.0;
+  spaghettimonsterData.s4 = f4.filter(analogRead(SENSOR_PIN_4)) / 4095.0;
+  spaghettimonsterData.s5 = f5.filter(analogRead(SENSOR_PIN_5)) / 4095.0;
+  spaghettimonsterData.s6 = f6.filter(analogRead(SENSOR_PIN_6)) / 4095.0;
+
+
+  if (btn.isPressed()) {
+    Serial.println("calibrating...");
+    set_min_max(spaghettimonsterData.s1, r1);
+    set_min_max(spaghettimonsterData.s2, r2);
+    set_min_max(spaghettimonsterData.s3, r3);
+    set_min_max(spaghettimonsterData.s4, r4);
+    set_min_max(spaghettimonsterData.s5, r5);
+    set_min_max(spaghettimonsterData.s6, r6);
+  }
+  if (btn.released()) {
+    Serial.print("TODO: storing to EEPROM");
+  }
+
+
   if (autoPairing() == PAIR_PAIRED) {
     millisCurrent = millis();
     if (millisCurrent - millisOld >= send_interval) {
       millisOld = millisCurrent;
-      spaghettimonsterData.msgType = DATA;
-      spaghettimonsterData.id = BOARD_ID;
-      // spaghettimonsterData.s1 = f1.filter(analogRead(SENSOR_PIN_1)) / 4095.0;
-      // spaghettimonsterData.s2 = f2.filter(analogRead(SENSOR_PIN_2)) / 4095.0;
-      // spaghettimonsterData.s3 = f3.filter(analogRead(SENSOR_PIN_3)) / 4095.0;
-      // spaghettimonsterData.s4 = f4.filter(analogRead(SENSOR_PIN_4)) / 4095.0;
-      // spaghettimonsterData.s5 = f5.filter(analogRead(SENSOR_PIN_5)) / 4095.0;
-      // spaghettimonsterData.s6 = f6.filter(analogRead(SENSOR_PIN_6)) / 4095.0;
 
-      float sample = multisample(SENSOR_PIN_1);
-      set_min_max(sample, r1);
-      spaghettimonsterData.s1 = constrain(mapfloat(sample, r1.min + 0.01, r1.max - 0.01, 0, 1), 0, 1);
-      // spaghettimonsterDataRounded.s1 = ((int)(spaghettimonsterData.s1 * 100.0f)) / 100.0f;
+      dataToSend.msgType = DATA;
+      dataToSend.id = BOARD_ID;
+      dataToSend.s1 = constrain(mapfloat(spaghettimonsterData.s1, r1.min + 0.01, r1.max - 0.01, 0, 1), 0, 1);
+      dataToSend.s2 = constrain(mapfloat(spaghettimonsterData.s2, r2.min + 0.01, r2.max - 0.01, 0, 1), 0, 1);
+      dataToSend.s3 = constrain(mapfloat(spaghettimonsterData.s3, r3.min + 0.01, r3.max - 0.01, 0, 1), 0, 1);
+      dataToSend.s4 = constrain(mapfloat(spaghettimonsterData.s4, r4.min + 0.01, r4.max - 0.01, 0, 1), 0, 1);
+      dataToSend.s5 = constrain(mapfloat(spaghettimonsterData.s5, r5.min + 0.01, r5.max - 0.01, 0, 1), 0, 1);
+      dataToSend.s6 = constrain(mapfloat(spaghettimonsterData.s6, r6.min + 0.01, r6.max - 0.01, 0, 1), 0, 1);
 
-      sample = multisample(SENSOR_PIN_2);
-      set_min_max(sample, r2);
-      spaghettimonsterData.s2 = constrain(mapfloat(sample, r2.min + 0.01, r2.max - 0.01, 0, 1), 0, 1);
-      // spaghettimonsterDataRounded.s2 = ((int)(spaghettimonsterData.s2 * 100.0f)) / 100.0f;
-
-
-      sample = multisample(SENSOR_PIN_3);
-      set_min_max(sample, r3);
-      spaghettimonsterData.s3 = constrain(mapfloat(sample, r3.min + 0.01, r3.max - 0.01, 0, 1), 0, 1);
-      // spaghettimonsterDataRounded.s3 = ((int)(spaghettimonsterData.s3 * 100.0f)) / 100.0f;
-
-
-      sample = multisample(SENSOR_PIN_4);
-      set_min_max(sample, r4);
-      spaghettimonsterData.s4 = constrain(mapfloat(sample, r4.min + 0.01, r4.max - 0.01, 0, 1), 0, 1);
-      // spaghettimonsterDataRounded.s4 = ((int)(spaghettimonsterData.s4 * 100.0f)) / 100.0f;
-
-
-      sample = multisample(SENSOR_PIN_5);
-      set_min_max(sample, r5);
-      spaghettimonsterData.s5 = constrain(mapfloat(sample, r5.min + 0.01, r5.max - 0.01, 0, 1), 0, 1);
-      // spaghettimonsterDataRounded.s5 = ((int)(spaghettimonsterData.s5 * 100.0f)) / 100.0f;
-
-
-      sample = multisample(SENSOR_PIN_6);
-      set_min_max(sample, r6);
-      spaghettimonsterData.s6 = constrain(mapfloat(sample, r6.min + 0.01, r6.max - 0.01, 0, 1), 0, 1);
-      // spaghettimonsterDataRounded.s6 = ((int)(spaghettimonsterData.s6 * 100.0f)) / 100.0f;
-
-
-      esp_err_t result = esp_now_send(serverAddress, (uint8_t *)&spaghettimonsterData, sizeof(sensor_data));
+      esp_err_t result = esp_now_send(serverAddress, (uint8_t *)&dataToSend, sizeof(sensor_data));
       if (result != ESP_OK) {
         Serial.println("Error sending the data");
       } else {
-        // Serial.printf("%.6f\n", spaghettimonsterData.s4);
+        // Serial.printf("%d\n", millis());
 
-        display.clearDisplay();
-        printID();
-        printSensorValue(spaghettimonsterData.s1, 0);
-        printSensorValue(spaghettimonsterData.s2, 1);
-        printSensorValue(spaghettimonsterData.s3, 2);
-        printSensorValue(spaghettimonsterData.s4, 3);
-        printSensorValue(spaghettimonsterData.s5, 4);
-        printSensorValue(spaghettimonsterData.s6, 5);
-        display.display();
+        Serial.printf("%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n", dataToSend.s1, dataToSend.s2, dataToSend.s3, dataToSend.s4, dataToSend.s5, dataToSend.s6);
+
+        // display.clearDisplay();
+        // printID();
+        // printSensorValue(spaghettimonsterData.s1, 0);
+        // printSensorValue(spaghettimonsterData.s2, 1);
+        // printSensorValue(spaghettimonsterData.s3, 2);
+        // printSensorValue(spaghettimonsterData.s4, 3);
+        // printSensorValue(spaghettimonsterData.s5, 4);
+        // printSensorValue(spaghettimonsterData.s6, 5);
+        // display.display();
       }
     }
   }

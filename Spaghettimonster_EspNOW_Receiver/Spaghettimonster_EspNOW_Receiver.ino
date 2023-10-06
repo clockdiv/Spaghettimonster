@@ -5,7 +5,7 @@
 #include <Adafruit_SSD1306.h>
 
 const uint8_t SPAGHETTIMONSTER_COUNT = 6;
-const unsigned long send_interval = 50;
+const unsigned long send_interval = 1000 / 60;
 
 enum MessageType { PAIRING,
                    DATA,
@@ -30,8 +30,9 @@ typedef struct sensor_data {
   float s6;
 } sensor_data;
 // sensor_data spaghettimonsterData_01, spaghettimonsterData_02, spaghettimonsterData_03;
+// volatile sensor_data spaghettimonsterData[SPAGHETTIMONSTER_COUNT];
 sensor_data spaghettimonsterData[SPAGHETTIMONSTER_COUNT];
-sensor_data tmp_data;
+
 
 esp_now_peer_info_t slave;
 int channel = 1;
@@ -40,6 +41,8 @@ unsigned long millisCurrent, millisOld;
 unsigned long stopwatch = 0, stopwatchOld = 0;
 
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
+
+// int counter1 = 0, counter2 = 0;
 
 void printMAC(const uint8_t *mac_addr) {
   char macStr[18];
@@ -58,42 +61,22 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 }
 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
-  // stopwatch = millis();
-  // Serial.println(stopwatch);
-  // stopwatchOld = stopwatch;
-
   // Serial.print(len);
   // Serial.print(" bytes of data received from : ");
   // printMAC(mac_addr);
   // Serial.println();
+  // incomingDataGlobal = (sensor_data*)incomingData;
   uint8_t type = incomingData[0];  // first message byte is the type of message
+
   switch (type) {
     case DATA:  // the message is data type
-
-
-
+      sensor_data tmp_data;
       memcpy(&tmp_data, incomingData, sizeof(sensor_data));
-
       if (tmp_data.id > 0) {
         memcpy(&spaghettimonsterData[tmp_data.id - 1], incomingData, sizeof(sensor_data));
       }
+      // counter1++;
 
-
-
-
-
-
-      // if (tmp_data.id == 1) {
-      //   memcpy(&spaghettimonsterData[0], incomingData, sizeof(sensor_data));
-      // } else if (tmp_data.id == 2) {
-      //   memcpy(&spaghettimonsterData[1], incomingData, sizeof(sensor_data));
-      // } else if (tmp_data.id == 3) {
-      //   memcpy(&spaghettimonsterData[2], incomingData, sizeof(sensor_data));
-      // }
-
-
-      // memcpy(&spaghettimonsterData_01, incomingData, sizeof(sensor_data));
-      // Serial.printf("%d,%f,%f,%f,%f,%f,%f\n", spaghettimonsterData_01.id, spaghettimonsterData_01.s1, spaghettimonsterData_01.s2, spaghettimonsterData_01.s3, spaghettimonsterData_01.s4, spaghettimonsterData_01.s5, spaghettimonsterData_01.s6);
       break;
 
     case PAIRING:  // the message is a pairing request
@@ -180,6 +163,7 @@ void setup() {
   for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
     spaghettimonsterData[i].id = 255;
   }
+
 }
 
 void displayData(uint8_t index) {
@@ -205,8 +189,6 @@ void displayData(uint8_t index) {
     display.print('-');
   }
 }
-
-
 
 void print_data_as_csv() {
   for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
@@ -252,21 +234,18 @@ void print_debug_data() {
   // Serial.printf("{\"1\":\"(0.503225,0.521750,0.214153,0.522978,0.133823,0.000000)\",\"2\":\"(0.535541,0.536594,0.500000,0.538680,0.543106,0.748236)\",\"3\":\"(0.533928,0.523421,0.524241,0.496456,0.532858,0.000000)\"}");
   // Serial.printf("{\"1\":[0.503225,0.521750,0.214153,0.522978,0.133823,0.000000],\"2\":[0.535541,0.536594,0.500000,0.538680,0.543106,0.748236],\"3\":[0.533928,0.523421,0.524241,0.496456,0.532858,0.000000]}");
   // Serial.printf("%.6f,%.6f\n", spaghettimonsterData[1].s4, (sin(millis()/100.0)+1.0)/2.0);
-
   // Serial.printf("%.6f\n", spaghettimonsterData[1].s4);
+  // Serial.printf("%.6f,%d,%d\n", spaghettimonsterData[1].s4, counter1, counter2);
+  // Serial.printf("%d\n", millis());
 
-  uint8_t i = 1;
-
-  Serial.printf("%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f",
-                spaghettimonsterData[i].id,
-                spaghettimonsterData[i].s1,
-                spaghettimonsterData[i].s2,
-                spaghettimonsterData[i].s3,
-                spaghettimonsterData[i].s4,
-                spaghettimonsterData[i].s5,
-                spaghettimonsterData[i].s6);
-
-  Serial.printf("\n");
+  Serial.printf("%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+                spaghettimonsterData[1].id,
+                spaghettimonsterData[1].s1,
+                spaghettimonsterData[1].s2,
+                spaghettimonsterData[1].s3,
+                spaghettimonsterData[1].s4,
+                spaghettimonsterData[1].s5,
+                spaghettimonsterData[1].s6);
 }
 
 void print_debug_sine_data() {
@@ -321,8 +300,8 @@ void loop() {
     // print_debug_sine_data();
     print_data_as_json();
 
+    // print_data_to_display();
 
-    print_data_to_display();
     millisOld = millisCurrent;
   }
 }
