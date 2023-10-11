@@ -3,7 +3,7 @@
 
 class averageFilter {
     int maxValues;
-    float values[12]; // how many values to take the average from
+    float values[32]; // how many values to take the average from
     float average;
 
   public:

@@ -376,7 +376,7 @@ void loop() {
     print_data_as_json();
 
     if (btn.isPressed()) {
-      Serial.println("printing to display");
+      // Serial.println("printing to display");
       print_data_to_display();
     } else if (btn.rose()) {
       display.clearDisplay();
