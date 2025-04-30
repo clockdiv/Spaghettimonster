@@ -1,9 +1,6 @@
-#ifndef AVERAGEFILTER_H
-#define AVERAGEFILTER_H
-
 class averageFilter {
     int maxValues;
-    float values[32]; // how many values to take the average from
+    float values[16]; // how many values to take the average from
     float average;
 
   public:
@@ -35,5 +32,3 @@ class averageFilter {
     }
 
 };
-
-#endif
