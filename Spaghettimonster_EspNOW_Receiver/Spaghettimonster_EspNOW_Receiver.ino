@@ -1,25 +1,23 @@
-#include <esp_now.h>
-#include <WiFi.h>
-#include <Wire.h>
-#include <Adafruit_SSD1306.h>
+#include "ESP32_NOW.h"
+#include "WiFi.h"
+
+#include <esp_mac.h>  // For the MAC2STR and MACSTR macros
+
+#include <vector>
+
 #include <Bounce2.h>
 
+#define ESPNOW_WIFI_CHANNEL 6
+#define SPAGHETTIMONSTER_COUNT 1
 #define BTN_PIN 19
 
+const unsigned long fps = 10;
+const unsigned long send_interval = 1000 / fps;
 
-const uint8_t SPAGHETTIMONSTER_COUNT = 6;
-const unsigned long send_interval = 1000 / 60;
-
-esp_now_peer_info_t slave;
-int channel = 1;
 unsigned long millisCurrent, millisOld;
 
-Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
 Bounce2::Button btn = Bounce2::Button();
-
-String printed_status = "";
-
 
 
 
@@ -48,89 +46,92 @@ typedef struct sensor_data {
 sensor_data spaghettimonsterData[SPAGHETTIMONSTER_COUNT];
 
 
+class ESP_NOW_Peer_Class : public ESP_NOW_Peer {
+public:
+  // Constructor of the class
+  ESP_NOW_Peer_Class(const uint8_t *mac_addr, uint8_t channel, wifi_interface_t iface, const uint8_t *lmk)
+    : ESP_NOW_Peer(mac_addr, channel, iface, lmk) {}
 
+  // Destructor of the class
+  ~ESP_NOW_Peer_Class() {}
 
-// ------------------------
-//  ESPNOW Functions
-// ------------------------
-
-void printMAC(const uint8_t *mac_addr) {
-  char macStr[18];
-  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
-           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-  Serial.print(macStr);
-}
-
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  // Serial.print("Last Packet Send Status: ");
-  // Serial.print(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success to " : "Delivery Fail to ");
-  // printMAC(mac_addr);
-  // Serial.println();
-
-  if (status != ESP_NOW_SEND_SUCCESS) Serial.println("OnDataSent() - Delivery Fail");
-}
-
-void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
-  // Serial.print(len);
-  // Serial.print(" bytes of data received from : ");
-  // printMAC(mac_addr);
-  // Serial.println();
-  // incomingDataGlobal = (sensor_data*)incomingData;
-  uint8_t type = incomingData[0];  // first message byte is the type of message
-
-  switch (type) {
-    case DATA:  // the message is data type
-      sensor_data tmp_data;
-      memcpy(&tmp_data, incomingData, sizeof(sensor_data));
-      memcpy(&spaghettimonsterData[tmp_data.id], incomingData, sizeof(sensor_data));
-      break;
-
-    case PAIRING:  // the message is a pairing request
-      memcpy(&pairingData, incomingData, sizeof(pairingData));
-      Serial.println(pairingData.msgType);
-      Serial.println(pairingData.id);
-      Serial.print("Pairing request from: ");
-      printMAC(mac_addr);
-      Serial.println();
-      Serial.println(pairingData.channel);
-      if (pairingData.id < 255) {  // do not replay to server itself
-        if (pairingData.msgType == PAIRING) {
-          pairingData.id = 255;  // 255 is server
-          pairingData.channel = channel;
-          Serial.println("send response");
-          esp_err_t result = esp_now_send(mac_addr, (uint8_t *)&pairingData, sizeof(pairingData));
-          addPeer(mac_addr);
-        }
-      }
-      break;
-  }
-}
-
-bool addPeer(const uint8_t *peer_addr) {  // add pairing
-  memset(&slave, 0, sizeof(slave));
-  const esp_now_peer_info_t *peer = &slave;
-  memcpy(slave.peer_addr, peer_addr, 6);
-
-  slave.channel = channel;  // pick a channel
-  slave.encrypt = 0;        // no encryption
-  // check if the peer exists
-  bool exists = esp_now_is_peer_exist(slave.peer_addr);
-  if (exists) {
-    // Slave already paired.
-    Serial.println("Already Paired");
-    return true;
-  } else {
-    esp_err_t addStatus = esp_now_add_peer(peer);
-    if (addStatus == ESP_OK) {
-      Serial.println("Pair success");
-      return true;
-    } else {
-      Serial.println("Pair failed");
+  // Function to register the master peer
+  bool add_peer() {
+    if (!add()) {
+      log_e("Failed to register the broadcast peer");
       return false;
     }
+    return true;
+  }
+
+  // Function to print the received messages from the master
+  void onReceive(const uint8_t *data, size_t len, bool broadcast) {
+    // Safety check: make sure the received data is large enough
+    if (len >= sizeof(sensor_data)) {
+      memcpy(&spaghettimonsterData[0], data, sizeof(sensor_data));
+      sendSensorData();
+      // Serial.println("Data successfully copied into spaghettimonsterData[0]");
+      // Print the contents of spaghettimonsterData[0]
+      // Serial.println("sensor_data contents:");
+      // Serial.printf("  msgType: %u\n", spaghettimonsterData[0].msgType);
+      // Serial.printf("  id     : %u\n", spaghettimonsterData[0].id);
+      // Serial.printf("  s0     : %.2f\n", spaghettimonsterData[0].s0);
+      // Serial.printf("  s1     : %.2f\n", spaghettimonsterData[0].s1);
+      // Serial.printf("  s2     : %.2f\n", spaghettimonsterData[0].s2);
+      // Serial.printf("  s3     : %.2f\n", spaghettimonsterData[0].s3);
+      // Serial.printf("  s4     : %.2f\n", spaghettimonsterData[0].s4);
+      // Serial.printf("  s5     : %.2f\n", spaghettimonsterData[0].s5);
+    } else {
+      Serial.println("Received data is too small to fit into sensor_data");
+    }
+    // Serial.printf("Received a message from master " MACSTR " (%s)\n", MAC2STR(addr()), broadcast ? "broadcast" : "unicast");
+    // Serial.printf("  Message: %s\n", (char *)data);
+  }
+
+  void sendSensorData() {
+    sensor_data *d = &spaghettimonsterData[0];
+    Serial.print(d->msgType);
+    Serial.print(",");
+    Serial.print(d->id);
+    Serial.print(",");
+    Serial.print(d->s0, 2);
+    Serial.print(",");
+    Serial.print(d->s1, 2);
+    Serial.print(",");
+    Serial.print(d->s2, 2);
+    Serial.print(",");
+    Serial.print(d->s3, 2);
+    Serial.print(",");
+    Serial.print(d->s4, 2);
+    Serial.print(",");
+    Serial.print(d->s5, 2);
+    Serial.println();  // newline to indicate end of packet
+  }
+};
+
+// List of all the masters. It will be populated when a new master is registered
+std::vector<ESP_NOW_Peer_Class> masters;
+
+
+// Callback called when an unknown peer sends a message
+void register_new_master(const esp_now_recv_info_t *info, const uint8_t *data, int len, void *arg) {
+  if (memcmp(info->des_addr, ESP_NOW.BROADCAST_ADDR, 6) == 0) {
+    Serial.printf("Unknown peer " MACSTR " sent a broadcast message\n", MAC2STR(info->src_addr));
+    Serial.println("Registering the peer as a master");
+
+    ESP_NOW_Peer_Class new_master(info->src_addr, ESPNOW_WIFI_CHANNEL, WIFI_IF_STA, NULL);
+
+    masters.push_back(new_master);
+    if (!masters.back().add_peer()) {
+      Serial.println("Failed to register the new master");
+      return;
+    }
+  } else {
+    // The slave will only receive broadcast messages
+    log_v("Received a unicast message from " MACSTR, MAC2STR(info->src_addr));
+    log_v("Igorning the message");
   }
 }
-
 
 
 
@@ -229,137 +230,43 @@ void print_debug_sine_data() {
 
 
 
-
-
-// ------------------------
-//  Display Functions
-// ------------------------
-
-void displayData(uint8_t index) {
-  const int width = 21;
-  const int height = 30;
-  const int padding = 6;
-  const int x = 0;
-  const int y = 52;
-  display.setCursor(x + index * width + 4, y + 4);
-  display.setTextSize(1);
-
-  if (spaghettimonsterData[index].id < 255) {
-    display.print(spaghettimonsterData[index].id);
-
-    display.fillRect(x + index * width + 0 * 2, y - spaghettimonsterData[index].s0 * height, 1, spaghettimonsterData[index].s0 * height, SSD1306_WHITE);
-    display.fillRect(x + index * width + 1 * 2, y - spaghettimonsterData[index].s1 * height, 1, spaghettimonsterData[index].s1 * height, SSD1306_WHITE);
-    display.fillRect(x + index * width + 2 * 2, y - spaghettimonsterData[index].s2 * height, 1, spaghettimonsterData[index].s2 * height, SSD1306_WHITE);
-    display.fillRect(x + index * width + 3 * 2, y - spaghettimonsterData[index].s3 * height, 1, spaghettimonsterData[index].s3 * height, SSD1306_WHITE);
-    display.fillRect(x + index * width + 4 * 2, y - spaghettimonsterData[index].s4 * height, 1, spaghettimonsterData[index].s4 * height, SSD1306_WHITE);
-    display.fillRect(x + index * width + 5 * 2, y - spaghettimonsterData[index].s5 * height, 1, spaghettimonsterData[index].s5 * height, SSD1306_WHITE);
-
-  } else {
-    display.print('-');
-  }
-}
-
-void printLogo() {
-  display.setTextWrap(false);
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-
-  display.setCursor(0, 0);
-  display.print("Spaghetti");
-  display.setCursor(6, 7);
-  display.print("-monster");
-
-  display.setCursor(54, 0);
-  display.setTextSize(2);
-  display.print("RX");
-}
-
-void print_data_to_display() {
-  display.clearDisplay();
-
-  for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
-    displayData(i);
-  }
-
-  printLogo();
-  display.display();
-}
-
-void printStatus(String status) {
-  printed_status = status;
-  display.setCursor(0, 64 - 12);
-  display.setTextSize(1);
-  display.print(printed_status);
-}
-
-void printChannel() {
-  display.setTextSize(1);
-  if (channel < 10) {
-    display.setCursor(128 - 12 - 14, 7);
-    display.print("ch");
-
-    display.setTextSize(2);
-    display.setCursor(128 - 12, 0);
-    display.print(channel);
-    display.setTextSize(1);
-  } else {
-    display.setCursor(128 - 24 - 14, 7);
-    display.print("ch");
-
-    display.setTextSize(2);
-    display.setCursor(128 - 24, 0);
-    display.print(channel);
-    display.setTextSize(1);
-  }
-}
-
-
-
 // ------------------------
 //  Setup + Loop
 // ------------------------
 
 void setup() {
-  Serial.begin(500000);
+  Serial.begin(115200);
 
   btn.attach(BTN_PIN, INPUT_PULLUP);
   btn.interval(25);
   btn.setPressedState(LOW);
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("SSD1306 allocation failed"));
-    for (;;)
-      ;  // Don't proceed, loop forever
+
+  // Initialize the Wi-Fi module
+  WiFi.mode(WIFI_STA);
+  WiFi.setChannel(ESPNOW_WIFI_CHANNEL);
+  while (!WiFi.STA.started()) {
+    delay(100);
   }
 
+  Serial.println("ESP-NOW Example - Broadcast Slave");
+  Serial.println("Wi-Fi parameters:");
+  Serial.println("  Mode: STA");
+  Serial.println("  MAC Address: " + WiFi.macAddress());
+  Serial.printf("  Channel: %d\n", ESPNOW_WIFI_CHANNEL);
 
-  WiFi.mode(WIFI_MODE_STA);
-  Serial.print("Receiver ESP Board MAC Address:  ");
-  Serial.println(WiFi.macAddress());
-
-  channel = WiFi.channel();
-  Serial.print("Station IP Address: ");
-  Serial.println(WiFi.localIP());
-  Serial.print("Wi-Fi Channel: ");
-  Serial.println(WiFi.channel());
-
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
+  // Initialize the ESP-NOW protocol
+  if (!ESP_NOW.begin()) {
+    Serial.println("Failed to initialize ESP-NOW");
+    Serial.println("Reeboting in 5 seconds...");
+    delay(5000);
+    ESP.restart();
   }
 
-  esp_now_register_send_cb(OnDataSent);
-  esp_now_register_recv_cb(OnDataRecv);
+  // Register the new peer callback
+  ESP_NOW.onNewPeer(register_new_master, NULL);
 
-  for (uint8_t i = 0; i < SPAGHETTIMONSTER_COUNT; i++) {
-    spaghettimonsterData[i].id = 255;
-  }
-
-  display.clearDisplay();
-  printLogo();
-  // printStatus("Receiving on Ch. " + String(channel));
-  printChannel();
-  display.display();
+  Serial.println("Setup complete. Waiting for a master to broadcast a message...");
 }
 
 void loop() {
@@ -367,23 +274,7 @@ void loop() {
 
   btn.update();
 
-
   if (millisCurrent - millisOld >= send_interval) {
-
-    // print_data_as_csv();
-    // print_debug_data();
-    // print_debug_sine_data();
-    print_data_as_json();
-
-    if (btn.isPressed()) {
-      // Serial.println("printing to display");
-      print_data_to_display();
-    } else if (btn.rose()) {
-      display.clearDisplay();
-      printLogo();
-      printChannel();
-      display.display();
-    }
     millisOld = millisCurrent;
   }
 }
